@@ -1,0 +1,74 @@
+name: Build and Sign Android APK
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build Signed APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Extract version from pubspec.yaml
+        id: get_version
+        run: |
+          VERSION_NAME=$(grep 'version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          DATE_TIME=$(date +'%Y-%m-%d-%H%M%S')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "DATE_TIME=$DATE_TIME" >> $GITHUB_ENV
+          # echo "VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)" >> $GITHUB_ENV
+
+      - name: Decode keystore
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+        run: |
+          echo "$ANDROID_KEYSTORE" | base64 --decode > android/app/release-keystore.jks
+
+      - name: Create key.properties
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "storePassword=$ANDROID_KEYSTORE_PASSWORD" > android/key.properties
+          echo "keyPassword=$ANDROID_KEY_PASSWORD" >> android/key.properties
+          echo "keyAlias=$ANDROID_KEY_ALIAS" >> android/key.properties
+          echo "storeFile=release-keystore.jks" >> android/key.properties
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK with version and timestamp
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-release-v-${{ env.VERSION_NAME }}-${{ env.DATE_TIME }}.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-apk
+          path: build/app/outputs/flutter-apk/app-release-v-${{ env.VERSION_NAME }}-${{ env.DATE_TIME }}.apk
+
+      # Storing build artifacts on releases section permanently
+      - name: Upload APK to GitHub Releases
+        if: github.event_name == 'push'
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: build/app/outputs/flutter-apk/app-release-v-${{ env.VERSION_NAME }}-${{ env.DATE_TIME }}.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release_name: Release ${{ env.VERSION_NAME }} ${{ env.DATE_TIME }}
+          tag: v${{ env.VERSION_NAME }}
+          commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
