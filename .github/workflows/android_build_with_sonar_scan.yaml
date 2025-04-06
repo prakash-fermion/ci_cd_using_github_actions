@@ -128,11 +128,5 @@ jobs:
 #        run: <mark><commands_to_build_your_project></mark>
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
-        with:
-          args: >
-            -Dsonar.projectKey=prakash-fermion_ci_cd_using_github_actions
-            -Dsonar.organization=prakash-fermion
-            -Dsonar.sources=lib
-            -Dsonar.tests=test
-            -Dsonar.host.url=https://sonarcoud.io
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
